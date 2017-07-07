@@ -1,6 +1,7 @@
 # tree object from stanfordnlp/treelstm
 from utils.vocab import ConstantTransition
 
+
 class Tree(object):
     def __init__(self):
         self.parent = None
@@ -74,7 +75,8 @@ def convert2sr_format(tree_root, sent):
         if tree.num_children == 0:
             return [str(sent[tree.idx - 1])]
         else:
-            return [ConstantTransition.SHIFT_TRANS] + _convert_rec(tree.children[0]) + _convert_rec(tree.children[1]) + [ConstantTransition.REDUCE_TRANS]
+            return [ConstantTransition.SHIFT_TRANS] + _convert_rec(tree.children[0]) + _convert_rec(
+                tree.children[1]) + [ConstantTransition.REDUCE_TRANS]
 
     return _convert_rec(tree_root)
 

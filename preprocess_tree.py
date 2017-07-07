@@ -1,7 +1,7 @@
 import argparse
 
+from utils.tree import *
 from utils.vocab import *
-from seq2seq_tree.tree import *
 
 parser = argparse.ArgumentParser(description='preprocess_tree.py')
 

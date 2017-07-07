@@ -2,12 +2,12 @@
 from __future__ import division
 
 import time
-import math
+
 from torch import cuda
-from utils.io_utils import *
-from utils.vocab import *
+
+from seq2seq.tree_models import *
 from utils.dataset import *
-from seq2seq_tree.models import *
+from utils.io_utils import *
 from utils.optimizer import Optim
 
 config_path = './config.tree.json'
