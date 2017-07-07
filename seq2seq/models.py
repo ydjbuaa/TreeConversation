@@ -5,12 +5,13 @@ from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from utils.vocab import Constants
 
+
 class GlobalAttention(nn.Module):
     def __init__(self, dim):
         super(GlobalAttention, self).__init__()
         self.linear_in = nn.Linear(dim, dim, bias=False)
         self.sm = nn.Softmax()
-        self.linear_out = nn.Linear(dim*2, dim, bias=False)
+        self.linear_out = nn.Linear(dim * 2, dim, bias=False)
         self.tanh = nn.Tanh()
         self.mask = None
 
@@ -38,8 +39,8 @@ class GlobalAttention(nn.Module):
 
         return context_output, attn
 
-class Encoder(nn.Module):
 
+class Encoder(nn.Module):
     def __init__(self, config, vocab_size):
         self.layers = config['n_layers']
         self.num_directions = 2 if config['bidirectional'] else 1
@@ -104,7 +105,6 @@ class StackedLSTM(nn.Module):
 
 
 class Decoder(nn.Module):
-
     def __init__(self, config, vocab_size):
         self.layers = config['n_layers']
         self.input_feed = config['input_feed']
@@ -122,7 +122,7 @@ class Decoder(nn.Module):
                                config['dropout'])
 
         self.attn = GlobalAttention(config['rnn_hidden_size'])
-        self.dropout = nn.Dropout( config['dropout'])
+        self.dropout = nn.Dropout(config['dropout'])
 
         self.hidden_size = config['rnn_hidden_size']
 
@@ -154,7 +154,6 @@ class Decoder(nn.Module):
 
 
 class Seq2SeqModel(nn.Module):
-
     def __init__(self, encoder, decoder):
         super(Seq2SeqModel, self).__init__()
         self.encoder = encoder
@@ -170,8 +169,8 @@ class Seq2SeqModel(nn.Module):
         #  we need to convert it to layers x batch x (directions*dim)
         if self.encoder.num_directions == 2:
             return h.view(h.size(0) // 2, 2, h.size(1), h.size(2)) \
-                    .transpose(1, 2).contiguous() \
-                    .view(h.size(0) // 2, h.size(1), h.size(2) * 2)
+                .transpose(1, 2).contiguous() \
+                .view(h.size(0) // 2, h.size(1), h.size(2) * 2)
         else:
             return h
 
@@ -184,7 +183,7 @@ class Seq2SeqModel(nn.Module):
         enc_hidden = (self._fix_enc_hidden(enc_hidden[0]),
                       self._fix_enc_hidden(enc_hidden[1]))
 
-        #enc_hidden = self._fix_enc_hidden(enc_hidden)
+        # enc_hidden = self._fix_enc_hidden(enc_hidden)
 
         out, dec_hidden, _attn = self.decoder(tgt_input, enc_hidden,
                                               context, init_output)
@@ -193,7 +192,6 @@ class Seq2SeqModel(nn.Module):
 
 
 class EncoderRNN(nn.Module):
-
     def __init__(self, config, vocab_size):
         self.layers = config['n_layers']
         self.num_directions = 2 if config['bidirectional'] else 1
@@ -203,8 +201,8 @@ class EncoderRNN(nn.Module):
 
         super(EncoderRNN, self).__init__()
         self.embedding = nn.Embedding(vocab_size,
-                                     config['word_emb_size'],
-                                     padding_idx=Constants.PAD)
+                                      config['word_emb_size'],
+                                      padding_idx=Constants.PAD)
 
         self.gru = nn.GRU(input_size, self.hidden_size,
                           num_layers=config['n_layers'],
@@ -228,8 +226,8 @@ class EncoderRNN(nn.Module):
             outputs = unpack(outputs)[0]
         return hidden_t, outputs
 
-class AttnDecoderRNN(nn.Module):
 
+class AttnDecoderRNN(nn.Module):
     def __init__(self, config, vocab_size):
         super(AttnDecoderRNN, self).__init__()
         self.layers = config['n_layers']
@@ -241,8 +239,8 @@ class AttnDecoderRNN(nn.Module):
             input_size += config['rnn_hidden_size']
 
         self.embedding = nn.Embedding(vocab_size,
-                                     config['word_emb_size'],
-                                     padding_idx=Constants.PAD)
+                                      config['word_emb_size'],
+                                      padding_idx=Constants.PAD)
 
         self.gru = nn.GRU(input_size, self.hidden_size,
                           num_layers=config['n_layers'],
@@ -265,7 +263,7 @@ class AttnDecoderRNN(nn.Module):
             emb_t = emb_t.squeeze(0)
             if self.input_feed:
                 emb_t = torch.cat([emb_t, output], 1)
-            #print(emb_t.size(), hidden.size())
+            # print(emb_t.size(), hidden.size())
             output, hidden = self.gru(emb_t.unsqueeze(0), hidden)
             output = output.squeeze(0)
             output, attn = self.attn(output, context.t())
@@ -276,9 +274,7 @@ class AttnDecoderRNN(nn.Module):
         return outputs, hidden, attn
 
 
-
 class Seq2SeqChatbot(nn.Module):
-
     def __init__(self, encoder, decoder, generator):
         super(Seq2SeqChatbot, self).__init__()
         self.encoder = encoder
@@ -295,8 +291,8 @@ class Seq2SeqChatbot(nn.Module):
         #  we need to convert it to layers x batch x (directions*dim)
         if self.encoder.num_directions == 2:
             return h.view(h.size(0) // 2, 2, h.size(1), h.size(2)) \
-                    .transpose(1, 2).contiguous() \
-                    .view(h.size(0) // 2, h.size(1), h.size(2) * 2)
+                .transpose(1, 2).contiguous() \
+                .view(h.size(0) // 2, h.size(1), h.size(2) * 2)
         else:
             return h
 

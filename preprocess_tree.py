@@ -15,9 +15,9 @@ parser.add_argument('-train_src', default="./data/stc.small/train/src.train.txt"
 parser.add_argument('-train_tgt', default="./data/stc.small/train/trg.train.txt",
                     help="Path to the training target data")
 
-parser.add_argument('-valid_src', default="./data/stc.small/train/src.train.txt",
+parser.add_argument('-valid_src', default="./data/stc.small/test/src.test.txt",
                     help="Path to the validation source data")
-parser.add_argument('-valid_tgt', default="./data/stc.small/train/trg.train.txt",
+parser.add_argument('-valid_tgt', default="./data/stc.small/test/trg.test.txt",
                     help="Path to the validation target data")
 
 parser.add_argument('-save_data', default="./data/stc.small/",

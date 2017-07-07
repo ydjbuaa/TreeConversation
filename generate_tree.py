@@ -2,21 +2,19 @@ from __future__ import division
 
 import argparse
 import math
-
 import torch
+from seq2seq.tree_generator import TreeConversationGenerator
+from utils.tree import *
 
-from seq2seq.generator import ConversationGenerator
-
-parser = argparse.ArgumentParser(description='generate.py')
-parser.add_argument('-model', default="./data/stc.all/checkpoints/model_acc_27.33_ppl_87.58_e1.pt",
+parser = argparse.ArgumentParser(description='generate_tree.py')
+parser.add_argument('-model', default="./data/stc.small/checkpoints/model.tree_acc_14.74_ppl_167.30_e2.pt",
                     help='Path to model .pt file')
-parser.add_argument('-src', default="./data/stc.all/test/src.test.txt",
+
+parser.add_argument('-src', default="./data/stc.small/test/src.test.txt",
                     help='Source sequence to decode (one line per sequence)')
-parser.add_argument('-src_img_dir', default="",
-                    help='Source image directory')
 parser.add_argument('-tgt',
                     help='True target sequence (optional)')
-parser.add_argument('-output', default='./data/stc.all/test/stc.pred1.nlayer2.e1.txt',
+parser.add_argument('-output', default='./data/stc.small/test/stc.small.pred.tree.e5.txt',
                     help="""Path to output the predictions (each line will
                     be the decoded sequence""")
 parser.add_argument('-beam_size', type=int, default=5,
@@ -25,7 +23,7 @@ parser.add_argument('-batch_size', type=int, default=50,
                     help='Batch size')
 parser.add_argument('-max_sent_length', type=int, default=30,
                     help='Maximum sentence length.')
-parser.add_argument('-replace_unk', default=1,
+parser.add_argument('-replace_unk', default=0,
                     help="""Replace the generated UNK tokens with the source
                     token that had highest attention weight. If phrase_table
                     is provided, it will lookup the identified source token and
@@ -64,17 +62,20 @@ def main():
     if opt.cuda:
         torch.cuda.set_device(opt.gpu)
 
-    generator = ConversationGenerator(opt)
+    generator = TreeConversationGenerator(opt)
 
     out_fw = open(opt.output, 'w', encoding='utf-8')
 
     pred_score_total, pred_words_total, gold_score_total, gold_words_total = 0, 0, 0, 0
 
-    src_batch, tgt_batch = [], []
+    src_batch, tgt_batch, trans_batch = [], [], []
 
     count = 0
 
     tgt_fr = open(opt.tgt, 'r', encoding='utf-8') if opt.tgt else None
+    tree_fr = open(opt.src.replace("txt", "cparents"), 'r', encoding='utf-8')
+    if tree_fr is None:
+        raise ValueError("No Tree Data for source")
 
     if opt.dump_beam != "":
         import json
@@ -82,8 +83,13 @@ def main():
 
     for line in add_one(open(opt.src, 'r', encoding='utf-8')):
         if line is not None:
+            tree_tokens = tree_fr.readline().split()
             src_tokens = line.split()
+            tree = read_tree(tree_tokens)
+
+            trans_batch += [tree2transition(tree, src_tokens)]
             src_batch += [src_tokens]
+
             if tgt_fr:
                 tgt_tokens = tgt_fr.readline().split() if tgt_fr else None
                 tgt_batch += [tgt_tokens]
@@ -95,7 +101,8 @@ def main():
             if len(src_batch) == 0:
                 break
 
-        pred_batch, pred_score, gold_score = generator.generate_conversation(src_batch, tgt_batch)
+        pred_batch, pred_score, gold_score = generator.generate_conversation(src_batch, trans_batch, tgt_batch)
+
         pred_score_total += sum(score[0] for score in pred_score)
         pred_words_total += sum(len(x[0]) for x in pred_batch)
         if tgt_fr is not None:
@@ -111,7 +118,6 @@ def main():
                     pred_score[b][n],
                     " ".join(pred_batch[b][n])))
 
-            # outF.write(" ".join(predBatch[b][0]) + '\n')
             out_fw.flush()
             if count % 10 == 0:
                 print('generate {} lines over!'.format(count))
@@ -138,7 +144,7 @@ def main():
                                              " ".join(pred_batch[b][n])))
                 print('')
 
-        src_batch, tgt_batch = [], []
+        src_batch, tgt_batch, trans_batch = [], [], []
 
     report_score('PRED', pred_score_total, pred_words_total)
     if tgt_fr:

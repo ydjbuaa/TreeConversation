@@ -15,8 +15,8 @@
   "start_epoch":1,
   "param_init":0.1,
 
-  "batch_size":6,
-  "max_generator_batches":6,
+  "batch_size":16,
+  "max_generator_batches":8,
   "optim":"adam",
   "max_grad_norm":5.0,
   "learning_rate":0.0002,
@@ -30,6 +30,6 @@
   "rnn_hidden_size":128,
   "n_layers":1,
   "input_feed":1,
-  "bidirectional": true,
+  "bidirectional": false,
   "dropout":0.0
 }

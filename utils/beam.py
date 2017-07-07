@@ -47,7 +47,7 @@ class Beam(object):
         """Get the backpointers for the current timestep."""
         return self.prevKs[-1]
 
-    def advance(self, word_lk, attn_out):
+    def advance(self, word_lk, attn_out=None):
         """
         Given prob over words for every last beam `wordLk` and attention
         `attnOut`: Compute and update the beam search.
@@ -78,7 +78,8 @@ class Beam(object):
         prev_k = best_scores_id / num_words
         self.prevKs.append(prev_k)
         self.nextYs.append(best_scores_id - prev_k * num_words)
-        self.attn.append(attn_out.index_select(0, prev_k))
+        if attn_out is not None:
+            self.attn.append(attn_out.index_select(0, prev_k))
 
         # End condition is when top-of-beam is EOS.
         if self.nextYs[-1][0] == Constants.EOS:
@@ -108,11 +109,11 @@ class Beam(object):
             1. The hypothesis
             2. The attention at each time step.
         """
-        hyp, attn = [], []
+        hyp, attn = [], None  # []
         # print(len(self.prevKs), len(self.nextYs), len(self.attn))
         for j in range(len(self.prevKs) - 1, -1, -1):
-            hyp.append(self.nextYs[j+1][k])
-            attn.append(self.attn[j][k])
+            hyp.append(self.nextYs[j + 1][k])
+            # attn.append(self.attn[j][k])
             k = self.prevKs[j][k]
 
-        return hyp[::-1], torch.stack(attn[::-1])
+        return hyp[::-1], None  # torch.stack(attn[::-1])

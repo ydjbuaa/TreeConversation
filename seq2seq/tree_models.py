@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from utils.vocab import Constants, ConstantTransition
-
+from torch.autograd import Variable
 
 def state_bundle(h, c):
     return torch.cat([h, c], 1)
@@ -20,6 +20,25 @@ def batch_bundle(batch_iter):
 
 def batch_unbundle(batch_tensor):
     return torch.split(batch_tensor, 1)
+
+
+class TreeGuidedAttention(nn.Module):
+    def __init__(self, hidden_dim):
+        self.hidden_dim = hidden_dim
+        super(TreeGuidedAttention, self).__init__()
+        self.sm = nn.Softmax()
+        self.tanh = nn.Tanh()
+        self.attn_out = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(self, hidden, stack_context, transitions):
+        """
+        :param hidden: hidden state of decoder
+        :param stack_context: encoder outputs, stack list(batch_size * transL * tensor(1*hidden_size))
+        :param transitions: transitions to represent the parser tree structure
+        :return: attention output of hidden state
+        """
+        return hidden, None
+        pass
 
 
 class BinaryTreeLeafModule(nn.Module):
@@ -145,6 +164,25 @@ class SpinnTreeLSTM(nn.Module):
         # print(h_states.size(), c_states.size())
         return h_states, c_states
 
+    def generate_outputs(self, stack_outputs, num_trans):
+        """
+        :param stack_outputs: list of stack outputs(leaf and node hidden states)
+        :param num_trans: transitions length
+        :return: outputs batch_size * transL * hidden_dim
+        """
+        batch_size = len(stack_outputs)
+        outputs = Variable(torch.zeros(num_trans, batch_size, self.hidden_size))
+
+        for i in range(batch_size):
+            stack_output = stack_outputs[i]
+            for j in range(len(stack_output)):
+                hc = stack_output[j]
+                h, _ = state_unbundle(hc, self.hidden_size)
+                h = h.squeeze(0)
+                #copy from tail to head
+                outputs[num_trans-j-1, i] = h
+        return outputs
+
     def forward(self, seq_embs, transitions):
         """
         :param seq_embs: embs sequences(seqL * batch_size * dim)
@@ -173,9 +211,9 @@ class SpinnTreeLSTM(nn.Module):
                 if transition == ConstantTransition.SHIFT:  # shift
                     stack.append(buf.pop())
                     # print(stack[-1].size())
-                    stack_output.append(stack[-1].squeeze(0))
+                    stack_output.append(stack[-1])
 
-                elif transition == ConstantTransition.REDUCE: # reduce
+                elif transition == ConstantTransition.REDUCE:  # reduce
                     # kep the tmp result
                     rights.append(stack.pop())
                     lefts.append(stack.pop())
@@ -185,12 +223,12 @@ class SpinnTreeLSTM(nn.Module):
                 for transition, stack, stack_output in zip(trans.data, stacks, stack_outputs):
                     if transition == 2:
                         stack.append(next(reduced))
-                        # print(stack[-1].size())
-                        stack_output.append(stack[-1].squeeze(0))
+                        stack_output.append(stack[-1])
 
         # print(len(stacks))
         hidden_states = self.generate_hidden_states(stacks)
-        return hidden_states
+        outputs = self.generate_outputs(stack_outputs, num_transitions)
+        return outputs, hidden_states
 
 
 class EncoderTreeLSTM(nn.Module):
@@ -212,56 +250,8 @@ class EncoderTreeLSTM(nn.Module):
     def forward(self, src_inputs):
         # src_inputs:(sent_inputs, trees)
         embs = self.embedding(src_inputs[0])
-        hidden_states = self.tree_lstm(embs, src_inputs[1])
-        return hidden_states
-
-
-class TreeGuidedAttention(nn.Module):
-    def __init__(self, dim):
-        super(TreeGuidedAttention, self).__init__()
-        self.linear_in = nn.Linear(dim, dim, bias=False)
-        self.sm = nn.Softmax()
-        self.linear_out = nn.Linear(dim * 2, dim, bias=False)
-        self.tanh = nn.Tanh()
-        pass
-
-    def get_child_attn(self, tree):
-        la = tree.children[0].attn_score
-        ra = tree.children[1].attn_score
-
-        lh = tree.children[0].attn_state
-        rh = tree.children[1].attn_state
-
-        child_attn = torch.stack([la, ra])
-        child_attn_weights = self.sm(child_attn)
-        return child_attn_weights[0] * lh + child_attn_weights[1] * rh
-
-    def attn_forward(self, target, tree):
-        tree.attn_score = torch.dot(target, tree.state[1])
-        if tree.num_children == 0:
-            tree.attn_state = torch.dot(target, tree.state[1])
-        else:
-            for idx in range(tree.num_children):
-                _, = self.attn_forward(target, tree.children[idx])
-            child_attn = self.get_child_attn(tree)
-            tree.attn_state = tree.attn_score * (child_attn + tree.state[1])
-        return tree.attn_state
-
-    def forward(self, hidden_inputs, trees):
-        """
-        consider the tree states as the whole context of decoder hidden state
-        :param hidden_inputs: hidden state of decoder
-        :param trees: encoder tree states
-        :return:
-        """
-        targets = self.linear_in(hidden_inputs).unsqueeze(1)  # batch x 1* dim
-        attn_outputs = []
-        for i in range(hidden_inputs.size(0)):
-            attn_output = self.attn_forward(targets[i], trees[i])
-            attn_outputs += [attn_output.squeeze(0)]
-        attn_outputs = torch.stack(attn_outputs)  # batch * dim
-        attn_outputs = self.tanh(self.linear_out(attn_outputs))
-        return attn_outputs
+        encoder_outputs, hidden_states = self.tree_lstm(embs, src_inputs[1])
+        return encoder_outputs, hidden_states
 
 
 class StackedLSTM(nn.Module):
@@ -309,7 +299,7 @@ class DecoderStackLSTM(nn.Module):
                                 config['rnn_hidden_size'],
                                 config['dropout'])
 
-        # self.attn = GlobalAttention(config['rnn_hidden_size'])
+        self.attn = TreeGuidedAttention(config['rnn_hidden_size'])
         self.dropout = nn.Dropout(config['dropout'])
 
         self.hidden_size = config['rnn_hidden_size']
@@ -319,52 +309,52 @@ class DecoderStackLSTM(nn.Module):
             pretrained = torch.load(config['pre_word_embs_dec'])
             self.embedding.weight.data.copy_(pretrained)
 
-    def forward(self, tgt_input, hidden, context, init_output):
+    def forward(self, tgt_input, hidden, context, ctx_trans, init_output):
         embs = self.embedding(tgt_input)
         outputs = []
         output = init_output
         for emb_t in torch.split(embs, 1):
             emb_t = emb_t.squeeze(0)
-            # print(emb_t.size(), output.size())
+            #print(emb_t.size(), output.size())
             if self.input_feed:
                 emb_t = torch.cat([emb_t, output], 1)
             output, hidden = self.lstm(emb_t, hidden)
+            output, attn = self.attn(output, context, ctx_trans)
             output = self.dropout(output)
             outputs += [output]
         outputs = torch.stack(outputs)
-        return outputs, hidden, None
+        return outputs, hidden, attn
 
 
-class Seq2SeqModel(nn.Module):
+class TreeSeq2SeqModel(nn.Module):
     def __init__(self, encoder, decoder):
-        super(Seq2SeqModel, self).__init__()
+        super(TreeSeq2SeqModel, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
 
     def make_init_decoder_output(self, hidden_state):
-        batch_size = hidden_state.size(0)
+        batch_size = hidden_state.size(1)
         h_size = (batch_size, self.decoder.hidden_size)
         return Variable(hidden_state.data.new(*h_size).zero_(), requires_grad=False)
 
-    def _fix_enc_hidden(self, h):
+    @staticmethod
+    def fix_enc_hidden(h):
         #  the encoder hidden is  (layers*directions) x batch x dim
         #  we need to convert it to layers x batch x (directions*dim)
-        if self.encoder.num_directions == 2:
-            return h.view(h.size(0) // 2, 2, h.size(1), h.size(2)) \
-                .transpose(1, 2).contiguous() \
-                .view(h.size(0) // 2, h.size(1), h.size(2) * 2)
-        else:
-            return h.view(-1, h.size(0), h.size(1))
+        return h.view(-1, h.size(0), h.size(1))
 
     def forward(self, src_input, tgt_input):
-        # src = net_input[0]
-        # tgt = net_input[1][:-1]  # exclude last target from inputs
-        enc_hidden = self.encoder(src_input)
+        # src_input:(seq_inputs, seq_transitions)
+        # get encoder outputs and hidden states
+        # enc_outputs:
+        enc_outputs, enc_hidden = self.encoder(src_input)
+        #print(enc_outputs.size())
+
+        enc_hidden = (self.fix_enc_hidden(enc_hidden[0]),
+                      self.fix_enc_hidden(enc_hidden[1]))
+
         init_output = self.make_init_decoder_output(enc_hidden[0])
 
-        enc_hidden = (self._fix_enc_hidden(enc_hidden[0]),
-                      self._fix_enc_hidden(enc_hidden[1]))
-
-        out, dec_hidden, _attn = self.decoder(tgt_input, enc_hidden,
+        out, dec_hidden, _attn = self.decoder(tgt_input, enc_hidden, enc_outputs,
                                               src_input[1], init_output)
         return out

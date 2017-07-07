@@ -2,9 +2,7 @@
 from __future__ import division
 
 import time
-
 from torch import cuda
-
 from seq2seq.tree_models import *
 from utils.dataset import *
 from utils.io_utils import *
@@ -170,17 +168,17 @@ def train_model(model, train_set, valid_set, vocabs, optim):
                                 if len(configs['gpus']) > 1
                                 else model.generator.state_dict())
         #  (4) drop a checkpoint
-        # checkpoint = {
-        #     'model': model_state_dict,
-        #     'generator': generator_state_dict,
-        #     'vocabs': vocabs,
-        #     'config': configs,
-        #     'epoch': epoch,
-        #     'optim': optim
-        # }
-        # torch.save(checkpoint,
-        #            '%s_acc_%.2f_ppl_%.2f_e%d.pt'
-        #            % (configs['data_dir'] + configs['checkpoints'], 100*valid_acc, valid_ppl, epoch))
+        checkpoint = {
+            'model': model_state_dict,
+            'generator': generator_state_dict,
+            'vocabs': vocabs,
+            'config': configs,
+            'epoch': epoch,
+            'optim': optim
+        }
+        torch.save(checkpoint,
+                   '%s_acc_%.2f_ppl_%.2f_e%d.pt'
+                   % (configs['data_dir'] + configs['checkpoints'], 100*valid_acc, valid_ppl, epoch))
 
 
 def main():
@@ -202,14 +200,14 @@ def main():
                             dataset['train']['tgt'],
                             configs['batch_size'],
                             cuda=True,
-                            volatile=False, ret_limit=200)
+                            volatile=False, ret_limit=2000)
 
     valid_set = TreeDataset(dataset['valid']['src'],
                             dataset['valid']['trans'],
                             dataset['valid']['tgt'],
                             configs['batch_size'],
                             cuda=True,
-                            volatile=True, ret_limit=20)
+                            volatile=True, ret_limit=100)
 
     vocabs = dataset['vocabs']
 
@@ -225,7 +223,7 @@ def main():
     decoder = DecoderStackLSTM(configs, vocabs['tgt'].size)
     generator = nn.Linear(configs['rnn_hidden_size'], vocabs['tgt'].size)
 
-    model = Seq2SeqModel(encoder, decoder)
+    model = TreeSeq2SeqModel(encoder, decoder)
 
     if configs['train_from']:
         print('Loading model from checkpoint at %s' % configs['train_from'])
