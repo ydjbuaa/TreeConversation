@@ -1,0 +1,35 @@
+{
+  "data_dir":"./data/stc.small/",
+  "train_path":"/train/train.tree.pt",
+  "valid_path":"/valid/valid.tree.pt",
+  "test_path":"/test/test.tree.pt",
+  "vocab_path":"/vocab/vocab.tree.pt",
+  "checkpoints":"/checkpoints/model.tree",
+
+  "train_from":"",
+  "train_from_state_dict":"",
+  "extra_shuffle":false,
+  "gpus":[0],
+  "log_interval":10,
+  "num_epochs":20,
+  "start_epoch":1,
+  "param_init":0.1,
+
+  "batch_size":6,
+  "max_generator_batches":6,
+  "optim":"adam",
+  "max_grad_norm":5.0,
+  "learning_rate":0.0002,
+  "learning_rate_decay":0.8,
+  "start_decay_at":10,
+
+  "pre_word_embs_enc":null,
+  "pre_word_embs_dec":null,
+
+  "word_emb_size": 64,
+  "rnn_hidden_size":128,
+  "n_layers":1,
+  "input_feed":1,
+  "bidirectional": true,
+  "dropout":0.0
+}
