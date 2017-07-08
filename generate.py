@@ -8,15 +8,15 @@ import torch
 from seq2seq.generator import ConversationGenerator
 
 parser = argparse.ArgumentParser(description='generate.py')
-parser.add_argument('-model', default="./data/stc.middle/checkpoints/model_acc_9.81_ppl_385.37_e1.pt",
+parser.add_argument('-model', default="./data/stc.small/checkpoints/model_acc_19.73_ppl_272.28_e10.pt",
                     help='Path to model .pt file')
-parser.add_argument('-src', default="./data/stc.middle/test/src.test.txt",
+parser.add_argument('-src', default="./data/stc.small/test/src.test.txt",
                     help='Source sequence to decode (one line per sequence)')
 parser.add_argument('-src_img_dir', default="",
                     help='Source image directory')
 parser.add_argument('-tgt',
                     help='True target sequence (optional)')
-parser.add_argument('-output', default='./data/stc.middle/test/stc.pred.e1.txt',
+parser.add_argument('-output', default='./data/stc.small/test/stc.pred.e10.txt',
                     help="""Path to output the predictions (each line will
                     be the decoded sequence""")
 parser.add_argument('-beam_size', type=int, default=5,
@@ -109,7 +109,7 @@ def main():
                     count,
                     ' '.join(src_batch[b]),
                     pred_score[b][n],
-                    " ".join(pred_batch[b][n])))
+                    (" ".join(pred_batch[b][n]).replace("<unk>", ""))))
 
             # outF.write(" ".join(predBatch[b][0]) + '\n')
             out_fw.flush()

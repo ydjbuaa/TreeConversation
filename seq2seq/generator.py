@@ -184,8 +184,8 @@ class ConversationGenerator(object):
                 # sent_dec_out = beam * hidden_size
                 sent_dec_out = dec_out.view(beam_size, remaining_sents, dec_out.size(1))[:, idx]
                 sent_dec_out.data.copy_(sent_dec_out.data.index_select(0, beam[b].getCurrentOrigin()))
-                print(beam[b].getCurrentOrigin())
-                print(dec_out.view(beam_size, remaining_sents, dec_out.size(1))[:, idx])
+                #print(beam[b].getCurrentOrigin())
+                #print(dec_out.view(beam_size, remaining_sents, dec_out.size(1))[:, idx])
 
             if not active:
                 break

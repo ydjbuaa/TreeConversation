@@ -9,23 +9,23 @@ parser = argparse.ArgumentParser(description='preprocess_tree.py')
 
 parser.add_argument('-config', help="Read options from this file")
 
-parser.add_argument('-train_src', default="./data/stc.small/train/src.train.txt",
+parser.add_argument('-train_src', default="./data/stc.middle/train/src.train.txt",
                     help="Path to the training source data")
 
-parser.add_argument('-train_tgt', default="./data/stc.small/train/trg.train.txt",
+parser.add_argument('-train_tgt', default="./data/stc.middle/train/trg.train.txt",
                     help="Path to the training target data")
 
-parser.add_argument('-valid_src', default="./data/stc.small/test/src.test.txt",
+parser.add_argument('-valid_src', default="./data/stc.middle/valid/src.valid.txt",
                     help="Path to the validation source data")
-parser.add_argument('-valid_tgt', default="./data/stc.small/test/trg.test.txt",
+parser.add_argument('-valid_tgt', default="./data/stc.middle/valid/trg.valid.txt",
                     help="Path to the validation target data")
 
-parser.add_argument('-save_data', default="./data/stc.small/",
+parser.add_argument('-save_data', default="./data/stc.middle/",
                     help="Output file for the prepared data")
 
-parser.add_argument('-src_vocab_size', type=int, default=20000,
+parser.add_argument('-src_vocab_size', type=int, default=30000,
                     help="Size of the source vocabulary")
-parser.add_argument('-tgt_vocab_size', type=int, default=10000,
+parser.add_argument('-tgt_vocab_size', type=int, default=30000,
                     help="Size of the target vocabulary")
 parser.add_argument('-src_vocab',
                     help="Path to an existing source vocabulary")

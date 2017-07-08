@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from utils.vocab import Constants, ConstantTransition
-from torch.autograd import Variable
+
 
 def state_bundle(h, c):
     return torch.cat([h, c], 1)
@@ -22,21 +22,67 @@ def batch_unbundle(batch_tensor):
     return torch.split(batch_tensor, 1)
 
 
+class AttnReducer(nn.Module):
+    def __init__(self):
+        super(AttnReducer, self).__init__()
+        self.sm = nn.Softmax()
+
+    def forward(self, lefts, rights, parents, targets):
+        # bundle lefts, rights, parents => tmp_batch_size * hidden_size
+        lefts = batch_bundle(lefts)
+        rights = batch_bundle(rights)
+        parents = batch_bundle(parents)
+        targets = batch_bundle(targets)
+
+        left_weights = torch.bmm(lefts, targets)
+
+
 class TreeGuidedAttention(nn.Module):
     def __init__(self, hidden_dim):
         self.hidden_dim = hidden_dim
         super(TreeGuidedAttention, self).__init__()
-        self.sm = nn.Softmax()
+
         self.tanh = nn.Tanh()
         self.attn_out = nn.Linear(hidden_dim, hidden_dim)
 
     def forward(self, hidden, stack_context, transitions):
         """
-        :param hidden: hidden state of decoder
+        :param hidden: hidden state of decoder:batch_size * hidden_size
         :param stack_context: encoder outputs, stack list(batch_size * transL * tensor(1*hidden_size))
         :param transitions: transitions to represent the parser tree structure
         :return: attention output of hidden state
         """
+        # copy the stack context as the buffers
+        # buffers = []
+        # for i in range(len(stack_context)):
+        #     buffer = [h for h in stack_context[i]]
+        #     buffers += [buffer]
+        #
+        # num_transitions = transitions.size(0)
+        #
+        # stacks = [[] for _ in range(transitions.size(1))]
+        # for i in range(num_transitions):
+        #     trans = transitions[i]
+        #     lefts, rights, parents, targets = [], [], [], []
+        #     batch = zip(trans.data, buffers, stacks)
+        #     for j, (transition, buf, stack) in enumerate(batch):
+        #         if transition == ConstantTransition.SHIFT:  # shift
+        #             stack.append(buf.pop())
+        #
+        #         elif transition == ConstantTransition.REDUCE:  # reduce
+        #             # note the reduce need push the current state
+        #             rights.append(stack.pop())
+        #             lefts.append(stack.pop())
+        #
+        #             targets.append(hidden[j])
+        #             parents.append(buf.pop())
+        #
+        #     if rights:
+        #         reduced = iter(self.reduce_composer(lefts, rights))
+        #         for transition, stack in zip(trans.data, stacks):
+        #             if transition == 2:
+        #                 stack.append(next(reduced))
+
         return hidden, None
         pass
 
@@ -335,7 +381,7 @@ class DecoderStackLSTM(nn.Module):
         output = init_output
         for emb_t in torch.split(embs, 1):
             emb_t = emb_t.squeeze(0)
-            #print(emb_t.size(), output.size())
+            # print(emb_t.size(), output.size())
             if self.input_feed:
                 emb_t = torch.cat([emb_t, output], 1)
             output, hidden = self.lstm(emb_t, hidden)

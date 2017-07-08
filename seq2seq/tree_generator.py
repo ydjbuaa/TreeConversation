@@ -1,10 +1,6 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from utils.vocab import Constants, ConstantTransition
 from seq2seq.tree_models import *
-from utils.dataset import TreeDataset
 from utils.beam import Beam
+from utils.dataset import TreeDataset
 
 
 class TreeConversationGenerator(object):
@@ -159,6 +155,10 @@ class TreeConversationGenerator(object):
                     sent_states.data.copy_(
                         sent_states.data.index_select(
                             1, beam[b].getCurrentOrigin()))
+
+                #iterate decoder output
+                sent_dec_out = dec_out.view(beam_size, remaining_sents, dec_out.size(1))[:, idx]
+                sent_dec_out.data.copy_(sent_dec_out.data.index_select(0, beam[b].getCurrentOrigin()))
 
             if not active:
                 break
