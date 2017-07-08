@@ -8,15 +8,15 @@ import torch
 from seq2seq.generator import ConversationGenerator
 
 parser = argparse.ArgumentParser(description='generate.py')
-parser.add_argument('-model', default="./data/stc.all/checkpoints/model_acc_27.33_ppl_87.58_e1.pt",
+parser.add_argument('-model', default="./data/stc.middle/checkpoints/model_acc_9.81_ppl_385.37_e1.pt",
                     help='Path to model .pt file')
-parser.add_argument('-src', default="./data/stc.all/test/src.test.txt",
+parser.add_argument('-src', default="./data/stc.middle/test/src.test.txt",
                     help='Source sequence to decode (one line per sequence)')
 parser.add_argument('-src_img_dir', default="",
                     help='Source image directory')
 parser.add_argument('-tgt',
                     help='True target sequence (optional)')
-parser.add_argument('-output', default='./data/stc.all/test/stc.pred1.nlayer2.e1.txt',
+parser.add_argument('-output', default='./data/stc.middle/test/stc.pred.e1.txt',
                     help="""Path to output the predictions (each line will
                     be the decoded sequence""")
 parser.add_argument('-beam_size', type=int, default=5,
@@ -25,7 +25,7 @@ parser.add_argument('-batch_size', type=int, default=50,
                     help='Batch size')
 parser.add_argument('-max_sent_length', type=int, default=30,
                     help='Maximum sentence length.')
-parser.add_argument('-replace_unk', default=1,
+parser.add_argument('-replace_unk', default=0,
                     help="""Replace the generated UNK tokens with the source
                     token that had highest attention weight. If phrase_table
                     is provided, it will lookup the identified source token and

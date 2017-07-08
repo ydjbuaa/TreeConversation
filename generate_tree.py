@@ -7,7 +7,7 @@ from seq2seq.tree_generator import TreeConversationGenerator
 from utils.tree import *
 
 parser = argparse.ArgumentParser(description='generate_tree.py')
-parser.add_argument('-model', default="./data/stc.small/checkpoints/model.tree_acc_14.74_ppl_167.30_e2.pt",
+parser.add_argument('-model', default="./data/stc.small/checkpoints/model.tree_acc_9.04_ppl_212.83_e1.pt",
                     help='Path to model .pt file')
 
 parser.add_argument('-src', default="./data/stc.small/test/src.test.txt",

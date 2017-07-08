@@ -164,23 +164,41 @@ class SpinnTreeLSTM(nn.Module):
         # print(h_states.size(), c_states.size())
         return h_states, c_states
 
-    def generate_outputs(self, stack_outputs, num_trans):
-        """
-        :param stack_outputs: list of stack outputs(leaf and node hidden states)
-        :param num_trans: transitions length
-        :return: outputs batch_size * transL * hidden_dim
-        """
-        batch_size = len(stack_outputs)
-        outputs = Variable(torch.zeros(num_trans, batch_size, self.hidden_size))
+    # def generate_outputs(self, stack_outputs, num_trans):
+    #     """
+    #     :param stack_outputs: list of stack outputs(leaf and node hidden states)
+    #     :param num_trans: transitions length
+    #     :return: outputs batch_size * transL * hidden_dim
+    #     """
+    #     batch_size = len(stack_outputs)
+    #     outputs = Variable(torch.zeros(num_trans, batch_size, self.hidden_size))
+    #
+    #     for i in range(batch_size):
+    #         stack_output = stack_outputs[i]
+    #         for j in range(len(stack_output)):
+    #             hc = stack_output[j]
+    #             h, _ = state_unbundle(hc, self.hidden_size)
+    #             h = h.squeeze(0)
+    #             #copy from tail to head
+    #             outputs[num_trans-j-1, i] = h
+    #     return outputs
 
-        for i in range(batch_size):
-            stack_output = stack_outputs[i]
-            for j in range(len(stack_output)):
-                hc = stack_output[j]
+    def generate_outputs(self, stack_outputs):
+        """
+        fetch and return the sequence hidden states in format of list as the results
+        note that the outputs are reversed from tail to head
+        :param stack_outputs: each outputs kept in stack
+        :return: batch_size * transL * tensor(1*hidden_size)
+        """
+        outputs = []
+        for stack_output in stack_outputs:
+            output = []
+            while len(stack_output) > 0:
+                # reverse the hidden states from tail to head
+                hc = stack_output.pop()
                 h, _ = state_unbundle(hc, self.hidden_size)
-                h = h.squeeze(0)
-                #copy from tail to head
-                outputs[num_trans-j-1, i] = h
+                output.append(h)
+            outputs += [output]
         return outputs
 
     def forward(self, seq_embs, transitions):
@@ -227,7 +245,9 @@ class SpinnTreeLSTM(nn.Module):
 
         # print(len(stacks))
         hidden_states = self.generate_hidden_states(stacks)
-        outputs = self.generate_outputs(stack_outputs, num_transitions)
+        outputs = self.generate_outputs(stack_outputs)
+        # print(outputs[0][0])
+        # print(hidden_states[0][0])
         return outputs, hidden_states
 
 
@@ -309,7 +329,7 @@ class DecoderStackLSTM(nn.Module):
             pretrained = torch.load(config['pre_word_embs_dec'])
             self.embedding.weight.data.copy_(pretrained)
 
-    def forward(self, tgt_input, hidden, context, ctx_trans, init_output):
+    def forward(self, tgt_input, hidden, ctx, ctx_trans, init_output):
         embs = self.embedding(tgt_input)
         outputs = []
         output = init_output
@@ -319,7 +339,7 @@ class DecoderStackLSTM(nn.Module):
             if self.input_feed:
                 emb_t = torch.cat([emb_t, output], 1)
             output, hidden = self.lstm(emb_t, hidden)
-            output, attn = self.attn(output, context, ctx_trans)
+            output, attn = self.attn(output, ctx, ctx_trans)
             output = self.dropout(output)
             outputs += [output]
         outputs = torch.stack(outputs)
@@ -346,9 +366,8 @@ class TreeSeq2SeqModel(nn.Module):
     def forward(self, src_input, tgt_input):
         # src_input:(seq_inputs, seq_transitions)
         # get encoder outputs and hidden states
-        # enc_outputs:
+        # enc_outputs: batch_list * trans_list * tensor(1*hidden_size)
         enc_outputs, enc_hidden = self.encoder(src_input)
-        #print(enc_outputs.size())
 
         enc_hidden = (self.fix_enc_hidden(enc_hidden[0]),
                       self.fix_enc_hidden(enc_hidden[1]))

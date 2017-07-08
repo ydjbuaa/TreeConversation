@@ -87,7 +87,7 @@ class TreeConversationGenerator(object):
 
         # (2) if a target is specified, compute the 'goldScore'
         #  (i.e. log likelihood) of the target under the model
-        gold_scores = context.data.new(batch_size).zero_()
+        gold_scores = enc_states[0].data.new(batch_size).zero_()
         if tgt_batch is not None:
             dec_states = enc_states
             dec_out = self.model.make_init_decoder_output(enc_states[0])
@@ -106,7 +106,7 @@ class TreeConversationGenerator(object):
         # (3) run the decoder to generate sentences, using beam search
 
         # Expand tensors for each beam.
-        context = Variable(context.data.repeat(1, beam_size, 1))
+        context = context * beam_size  # Variable(context.data.repeat(1, beam_size, 1))
         dec_states = (Variable(enc_states[0].data.repeat(1, beam_size, 1)),
                       Variable(enc_states[1].data.repeat(1, beam_size, 1)))
 
@@ -123,7 +123,7 @@ class TreeConversationGenerator(object):
             tgt_input = torch.stack([b.getCurrentState() for b in beam
                                      if not b.done]).t().contiguous().view(1, -1)
 
-            #print(tgt_input.size(), dec_out.size())
+            # print(tgt_input.size(), dec_out.size())
 
             dec_out, dec_states, attn = self.model.decoder(
                 Variable(tgt_input, volatile=True), dec_states, context, src_batch[1], dec_out)
@@ -145,7 +145,7 @@ class TreeConversationGenerator(object):
                     continue
 
                 idx = batch_idx[b]
-                #if not beam[b].advance(word_lk.data[idx], attn.data[idx]):
+                # if not beam[b].advance(word_lk.data[idx], attn.data[idx]):
                 #    active += [b]
 
                 if not beam[b].advance(word_lk.data[idx], None):
@@ -178,8 +178,12 @@ class TreeConversationGenerator(object):
 
             dec_states = (update_active(dec_states[0]),
                           update_active(dec_states[1]))
+
             dec_out = update_active(dec_out)
-            context = update_active(context)
+
+            # update context note that context is the type of list
+            #context = update_active(context)
+            context = [context[i] for i in active_idx] * beam_size
 
             remaining_sents = len(active)
 

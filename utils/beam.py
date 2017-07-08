@@ -109,11 +109,13 @@ class Beam(object):
             1. The hypothesis
             2. The attention at each time step.
         """
-        hyp, attn = [], None  # []
+        hyp, attn = [], []
         # print(len(self.prevKs), len(self.nextYs), len(self.attn))
         for j in range(len(self.prevKs) - 1, -1, -1):
             hyp.append(self.nextYs[j + 1][k])
-            # attn.append(self.attn[j][k])
+            if self.attn is not None and len(self.attn) > 0:
+                attn.append(self.attn[j][k])
             k = self.prevKs[j][k]
-
-        return hyp[::-1], None  # torch.stack(attn[::-1])
+        if len(attn) == 0:
+            return hyp[::-1], None
+        return hyp[::-1], torch.stack(attn[::-1])

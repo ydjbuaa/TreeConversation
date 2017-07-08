@@ -2,12 +2,10 @@
 from __future__ import division
 
 import time
-import math
 from torch import cuda
-from utils.io_utils import *
-from utils.vocab import *
-from utils.dataset import *
 from seq2seq.models import *
+from utils.dataset import *
+from utils.io_utils import *
 from utils.optimizer import Optim
 
 config_path = './config.json'
@@ -20,21 +18,22 @@ if torch.cuda.is_available() and not configs['gpus']:
 if configs['gpus']:
     cuda.set_device(configs['gpus'][0])
 
+
 def loss_criterion(vocab_size):
     weight = torch.ones(vocab_size)
     weight[Constants.PAD] = 0
     crit = nn.CrossEntropyLoss(weight)
-    #crit = nn.NLLLoss(weight, size_average=False)
+    # crit = nn.NLLLoss(weight, size_average=False)
     if configs['gpus']:
         crit.cuda()
     return crit
+
 
 def memory_efficient_loss(outputs, targets, generator, crit, eval_flag=False):
     # compute generations one piece at a time
     num_correct, loss = 0, 0
     outputs = Variable(outputs.data, requires_grad=(not eval_flag), volatile=eval_flag)
 
-    batch_size = outputs.size(1)
     outputs_split = torch.split(outputs, configs['max_generator_batches'])
     targets_split = torch.split(targets, configs['max_generator_batches'])
     for i, (out_t, tgt_t) in enumerate(zip(outputs_split, targets_split)):
@@ -43,16 +42,15 @@ def memory_efficient_loss(outputs, targets, generator, crit, eval_flag=False):
         loss_t = crit(scores_t, tgt_t.view(-1))
         pred_t = scores_t.max(1)[1]
         num_correct_t = pred_t.data.eq(tgt_t.data) \
-                                   .masked_select(tgt_t.ne(Constants.PAD).data)\
-                                   .sum()
+            .masked_select(tgt_t.ne(Constants.PAD).data) \
+            .sum()
         num_correct += num_correct_t
         loss += loss_t.data[0]
         if not eval_flag:
             loss_t.backward()
 
     grad_output = None if outputs.grad is None else outputs.grad.data
-    return loss/ len(outputs_split), grad_output, num_correct
-
+    return loss / len(outputs_split), grad_output, num_correct
 
 
 def evaluate(model, criterion, data):
@@ -68,7 +66,7 @@ def evaluate(model, criterion, data):
         # exclude <s> from targets
         targets = tgt_batch[1:]
         loss, _, num_correct = memory_efficient_loss(
-                outputs, targets, model.generator, criterion, eval_flag=True)
+            outputs, targets, model.generator, criterion, eval_flag=True)
         total_loss += loss
         total_num_correct += num_correct
         total_words += targets.data.ne(Constants.PAD).sum()
@@ -109,10 +107,10 @@ def train_model(model, train_set, valid_set, vocabs, optim):
             # Exclude <s> from targets.
             targets = tgt_batch[1:]
 
-            #loss, grad_output, num_correct = cul_loss(outputs, targets, model.generator, criterion)
+            # loss, grad_output, num_correct = cul_loss(outputs, targets, model.generator, criterion)
 
             loss, grad_output, num_correct = memory_efficient_loss(
-                    outputs, targets, model.generator, criterion)
+                outputs, targets, model.generator, criterion)
 
             outputs.backward(grad_output)
 
@@ -130,12 +128,12 @@ def train_model(model, train_set, valid_set, vocabs, optim):
             if i % configs['log_interval'] == -1 % configs['log_interval']:
                 print(("Epoch %2d, %5d/%5d; acc: %6.2f; ppl: %6.2f; " +
                        "%3.0f src tok/s; %3.0f tgt tok/s; %6.0f s elapsed") %
-                      (epoch, i+1, len(train_set),
+                      (epoch, i + 1, len(train_set),
                        report_num_correct / report_tgt_words * 100,
                        math.exp(report_loss / configs['log_interval']),
-                       report_src_words/(time.time()-start),
-                       report_tgt_words/(time.time()-start),
-                       time.time()-start_time))
+                       report_src_words / (time.time() - start),
+                       report_tgt_words / (time.time() - start),
+                       time.time() - start_time))
 
                 report_loss, report_tgt_words = 0, 0
                 report_src_words, report_num_correct = 0, 0
@@ -150,13 +148,13 @@ def train_model(model, train_set, valid_set, vocabs, optim):
         train_loss, train_acc = train_epoch(epoch)
         train_ppl = math.exp(min(train_loss, 100))
         print('Train perplexity: %g' % train_ppl)
-        print('Train accuracy: %g' % (train_acc*100))
+        print('Train accuracy: %g' % (train_acc * 100))
 
         #  (2) evaluate on the validation set
         valid_loss, valid_acc = evaluate(model, criterion, valid_set)
         valid_ppl = math.exp(min(valid_loss, 100))
         print('Validation perplexity: %g' % valid_ppl)
-        print('Validation accuracy: %g' % (valid_acc*100))
+        print('Validation accuracy: %g' % (valid_acc * 100))
 
         #  (3) update the learning rate
         optim.update_learning_rate(valid_ppl, epoch)
@@ -179,7 +177,7 @@ def train_model(model, train_set, valid_set, vocabs, optim):
         }
         torch.save(checkpoint,
                    '%s_acc_%.2f_ppl_%.2f_e%d.pt'
-                   % (configs['data_dir'] + configs['checkpoints'], 100*valid_acc, valid_ppl, epoch))
+                   % (configs['data_dir'] + configs['checkpoints'], 100 * valid_acc, valid_ppl, epoch))
 
 
 def main():
@@ -200,14 +198,13 @@ def main():
                         dataset['train']['tgt'],
                         configs['batch_size'],
                         cuda=True,
-                        volatile=False, ret_limit=2000)
+                        volatile=False, ret_limit=10000)
 
     valid_set = Dataset(dataset['valid']['src'],
                         dataset['valid']['tgt'],
                         configs['batch_size'],
                         cuda=True,
                         volatile=True, ret_limit=200)
-
 
     vocabs = dataset['vocabs']
 
@@ -221,7 +218,6 @@ def main():
 
     encoder = Encoder(configs, vocabs['src'].size)
     decoder = Decoder(configs, vocabs['tgt'].size)
-
     generator = nn.Linear(configs['rnn_hidden_size'], vocabs['tgt'].size)
 
     model = Seq2SeqModel(encoder, decoder)

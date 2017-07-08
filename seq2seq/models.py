@@ -164,7 +164,7 @@ class Seq2SeqModel(nn.Module):
         h_size = (batch_size, self.decoder.hidden_size)
         return Variable(context.data.new(*h_size).zero_(), requires_grad=False)
 
-    def _fix_enc_hidden(self, h):
+    def fix_enc_hidden(self, h):
         #  the encoder hidden is  (layers*directions) x batch x dim
         #  we need to convert it to layers x batch x (directions*dim)
         if self.encoder.num_directions == 2:
@@ -180,8 +180,8 @@ class Seq2SeqModel(nn.Module):
         enc_hidden, context = self.encoder(src_input)
         init_output = self.make_init_decoder_output(context)
 
-        enc_hidden = (self._fix_enc_hidden(enc_hidden[0]),
-                      self._fix_enc_hidden(enc_hidden[1]))
+        enc_hidden = (self.fix_enc_hidden(enc_hidden[0]),
+                      self.fix_enc_hidden(enc_hidden[1]))
 
         # enc_hidden = self._fix_enc_hidden(enc_hidden)
 
