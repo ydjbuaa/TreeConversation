@@ -37,12 +37,18 @@ class AttnReducer(nn.Module):
         targets = batch_bundle(targets)
 
         attn_weights = torch.bmm(torch.stack([a_lefts, a_rights], 1), targets.unsqueeze(2))
-        attn_weights = self.sm(attn_weights.squeeze(2)).unsqueeze(1)
+        attn_weights = self.sm(attn_weights.squeeze(2))  # .unsqueeze(1)
 
-        b_parents = torch.bmm(attn_weights, torch.stack([b_lefts, b_rights], 1)).squeeze(1) + a_parents
-        #print(a_parents.size(), b_parents.size())
+        # b_parents = torch.bmm(attn_weights, torch.stack([b_lefts, b_rights], 1)).squeeze(1) + a_parents
+        # print(a_parents.size(), b_parents.size())
+
+        attn2 = torch.split(attn_weights, 1, 1)
+        # print(attn.size())
+        b_parents = b_lefts * attn2[0].expand_as(b_lefts) + b_rights * attn2[1].expand_as(b_rights) + a_parents
+
         b_parents = batch_unbundle(b_parents)
         return b_parents
+        # return batch_unbundle(a_parents)
 
 
 class TreeGuidedAttention(nn.Module):
@@ -60,7 +66,7 @@ class TreeGuidedAttention(nn.Module):
         :param transitions: transitions to represent the parser tree structure
         :return: attention output of hidden state
         """
-        #copy the stack context as the buffers
+        # copy the stack context as the buffers
         buffers = []
         for i in range(len(stack_context)):
             buffer = [h for h in stack_context[i]]
@@ -93,7 +99,7 @@ class TreeGuidedAttention(nn.Module):
                     targets.append(hidden[j].unsqueeze(0))
 
                     a_stack.append(buf.pop())
-                    #do not pop for parent state
+                    # do not pop for parent state
                     parents.append(a_stack[-1])
 
             if a_rights:
@@ -101,7 +107,9 @@ class TreeGuidedAttention(nn.Module):
                 for transition, b_stack in zip(trans.data, b_stacks):
                     if transition == ConstantTransition.REDUCE:
                         b_stack.append(next(reduced))
-        #for stack in b
+
+        for stack in b_stacks:
+            assert len(stack) == 1
         attn_output = [stack.pop() for stack in b_stacks]
         attn_output = batch_bundle(attn_output)
         attn_output = self.tanh(self.attn_out(torch.cat([attn_output, hidden], dim=1)))
