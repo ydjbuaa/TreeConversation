@@ -27,23 +27,31 @@ class AttnReducer(nn.Module):
         super(AttnReducer, self).__init__()
         self.sm = nn.Softmax()
 
-    def forward(self, lefts, rights, parents, targets):
+    def forward(self, a_lefts, a_rights, a_parents, b_lefts, b_rights, targets):
         # bundle lefts, rights, parents => tmp_batch_size * hidden_size
-        lefts = batch_bundle(lefts)
-        rights = batch_bundle(rights)
-        parents = batch_bundle(parents)
+        a_lefts = batch_bundle(a_lefts)
+        a_rights = batch_bundle(a_rights)
+        a_parents = batch_bundle(a_parents)
+        b_lefts = batch_bundle(b_lefts)
+        b_rights = batch_bundle(b_rights)
         targets = batch_bundle(targets)
 
-        left_weights = torch.bmm(lefts, targets)
+        attn_weights = torch.bmm(torch.stack([a_lefts, a_rights], 1), targets.unsqueeze(2))
+        attn_weights = self.sm(attn_weights.squeeze(2)).unsqueeze(1)
+
+        b_parents = torch.bmm(attn_weights, torch.stack([b_lefts, b_rights], 1)).squeeze(1) + a_parents
+        #print(a_parents.size(), b_parents.size())
+        b_parents = batch_unbundle(b_parents)
+        return b_parents
 
 
 class TreeGuidedAttention(nn.Module):
     def __init__(self, hidden_dim):
         self.hidden_dim = hidden_dim
         super(TreeGuidedAttention, self).__init__()
-
+        self.attn_reducer = AttnReducer()
         self.tanh = nn.Tanh()
-        self.attn_out = nn.Linear(hidden_dim, hidden_dim)
+        self.attn_out = nn.Linear(hidden_dim * 2, hidden_dim, bias=False)
 
     def forward(self, hidden, stack_context, transitions):
         """
@@ -52,39 +60,52 @@ class TreeGuidedAttention(nn.Module):
         :param transitions: transitions to represent the parser tree structure
         :return: attention output of hidden state
         """
-        # copy the stack context as the buffers
-        # buffers = []
-        # for i in range(len(stack_context)):
-        #     buffer = [h for h in stack_context[i]]
-        #     buffers += [buffer]
-        #
-        # num_transitions = transitions.size(0)
-        #
-        # stacks = [[] for _ in range(transitions.size(1))]
-        # for i in range(num_transitions):
-        #     trans = transitions[i]
-        #     lefts, rights, parents, targets = [], [], [], []
-        #     batch = zip(trans.data, buffers, stacks)
-        #     for j, (transition, buf, stack) in enumerate(batch):
-        #         if transition == ConstantTransition.SHIFT:  # shift
-        #             stack.append(buf.pop())
-        #
-        #         elif transition == ConstantTransition.REDUCE:  # reduce
-        #             # note the reduce need push the current state
-        #             rights.append(stack.pop())
-        #             lefts.append(stack.pop())
-        #
-        #             targets.append(hidden[j])
-        #             parents.append(buf.pop())
-        #
-        #     if rights:
-        #         reduced = iter(self.reduce_composer(lefts, rights))
-        #         for transition, stack in zip(trans.data, stacks):
-        #             if transition == 2:
-        #                 stack.append(next(reduced))
+        #copy the stack context as the buffers
+        buffers = []
+        for i in range(len(stack_context)):
+            buffer = [h for h in stack_context[i]]
+            buffers += [buffer]
 
-        return hidden, None
-        pass
+        num_transitions = transitions.size(0)
+
+        a_stacks = [[] for _ in range(transitions.size(1))]
+        b_stacks = [[] for _ in range(transitions.size(1))]
+
+        for i in range(num_transitions):
+            trans = transitions[i]
+            a_lefts, a_rights, b_lefts, b_rights, parents, targets = [], [], [], [], [], []
+
+            batch = zip(trans.data, buffers, a_stacks, b_stacks)
+            for j, (transition, buf, a_stack, b_stack) in enumerate(batch):
+                if transition == ConstantTransition.SHIFT:  # shift
+                    # append the same leaf state
+                    b_stack.append(buf[-1])
+                    a_stack.append(buf.pop())
+
+                elif transition == ConstantTransition.REDUCE:  # reduce
+                    # note the reduce need push the current state
+                    a_rights.append(a_stack.pop())
+                    a_lefts.append(a_stack.pop())
+
+                    b_rights.append(b_stack.pop())
+                    b_lefts.append(b_stack.pop())
+
+                    targets.append(hidden[j].unsqueeze(0))
+
+                    a_stack.append(buf.pop())
+                    #do not pop for parent state
+                    parents.append(a_stack[-1])
+
+            if a_rights:
+                reduced = iter(self.attn_reducer(a_lefts, a_rights, parents, b_lefts, b_rights, targets))
+                for transition, b_stack in zip(trans.data, b_stacks):
+                    if transition == ConstantTransition.REDUCE:
+                        b_stack.append(next(reduced))
+        #for stack in b
+        attn_output = [stack.pop() for stack in b_stacks]
+        attn_output = batch_bundle(attn_output)
+        attn_output = self.tanh(self.attn_out(torch.cat([attn_output, hidden], dim=1)))
+        return attn_output, None
 
 
 class BinaryTreeLeafModule(nn.Module):
@@ -285,7 +306,7 @@ class SpinnTreeLSTM(nn.Module):
             if rights:
                 reduced = iter(self.reduce_composer(lefts, rights))
                 for transition, stack, stack_output in zip(trans.data, stacks, stack_outputs):
-                    if transition == 2:
+                    if transition == ConstantTransition.REDUCE:
                         stack.append(next(reduced))
                         stack_output.append(stack[-1])
 
