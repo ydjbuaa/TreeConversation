@@ -103,6 +103,8 @@ class TreeConversationGenerator(object):
 
         # Expand tensors for each beam.
         context = context * beam_size  # Variable(context.data.repeat(1, beam_size, 1))
+        transitions = src_batch[1].repeat(1, beam_size)
+        #print(len(context), transitions.size())
         dec_states = (Variable(enc_states[0].data.repeat(1, beam_size, 1)),
                       Variable(enc_states[1].data.repeat(1, beam_size, 1)))
 
@@ -119,10 +121,10 @@ class TreeConversationGenerator(object):
             tgt_input = torch.stack([b.getCurrentState() for b in beam
                                      if not b.done]).t().contiguous().view(1, -1)
 
-            # print(tgt_input.size(), dec_out.size())
+            #print(tgt_input.size(), dec_out.size())
 
             dec_out, dec_states, attn = self.model.decoder(
-                Variable(tgt_input, volatile=True), dec_states, context, src_batch[1], dec_out)
+                Variable(tgt_input, volatile=True), dec_states, context, transitions, dec_out)
             # decOut: 1 x (beam*batch) x numWords
             dec_out = dec_out.squeeze(0)
             out = self.model.generator(dec_out)
@@ -157,8 +159,8 @@ class TreeConversationGenerator(object):
                             1, beam[b].getCurrentOrigin()))
 
                 #iterate decoder output
-                sent_dec_out = dec_out.view(beam_size, remaining_sents, dec_out.size(1))[:, idx]
-                sent_dec_out.data.copy_(sent_dec_out.data.index_select(0, beam[b].getCurrentOrigin()))
+                #sent_dec_out = dec_out.view(beam_size, remaining_sents, dec_out.size(1))[:, idx]
+                #sent_dec_out.data.copy_(sent_dec_out.data.index_select(0, beam[b].getCurrentOrigin()))
 
             if not active:
                 break
@@ -176,12 +178,23 @@ class TreeConversationGenerator(object):
                 return Variable(view.index_select(1, active_idx)
                                 .view(*new_size), volatile=True)
 
+            def update_active2(t):
+                # select only the remaining active sentences
+                t = t.t()
+                view = t.data.contiguous().view(beam_size, remaining_sents, t.size(1))
+
+                new_size = list(t.size())
+                new_size[-2] = new_size[-2] * len(active_idx) // remaining_sents
+                return Variable(view.index_select(1, active_idx)
+                                .view(*new_size), volatile=True).t()
+
             dec_states = (update_active(dec_states[0]),
                           update_active(dec_states[1]))
-
             dec_out = update_active(dec_out)
 
             # update context note that context is the type of list
+
+            transitions = update_active2(transitions)
             #context = update_active(context)
             context = [context[i] for i in active_idx] * beam_size
 

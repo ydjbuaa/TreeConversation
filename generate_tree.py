@@ -7,14 +7,14 @@ from seq2seq.tree_generator import TreeConversationGenerator
 from utils.tree import *
 
 parser = argparse.ArgumentParser(description='generate_tree.py')
-parser.add_argument('-model', default="./data/stc.middle/checkpoints/model.tree_acc_23.93_ppl_145.14_e7.pt",
+parser.add_argument('-model', default="./data/stc.middle/checkpoints/model.tree_acc_21.50_ppl_212.73_e1.pt",
                     help='Path to model .pt file')
 
 parser.add_argument('-src', default="./data/stc.middle/test/src.test.txt",
                     help='Source sequence to decode (one line per sequence)')
 parser.add_argument('-tgt',
                     help='True target sequence (optional)')
-parser.add_argument('-output', default='./data/stc.middle/test/stc.pred.tree2.e7.txt',
+parser.add_argument('-output', default='./data/stc.middle/test/stc.pred.tree.a.e1.txt',
                     help="""Path to output the predictions (each line will
                     be the decoded sequence""")
 parser.add_argument('-beam_size', type=int, default=5,
