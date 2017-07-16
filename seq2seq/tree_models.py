@@ -27,24 +27,37 @@ class AttnReducer(nn.Module):
         super(AttnReducer, self).__init__()
         self.sm = nn.Softmax()
 
-    def forward(self, a_lefts, a_rights, a_parents, b_lefts, b_rights, targets):
+    def forward(self, attn_lefts, attn_rights,  b_lefts, b_rights, a_parents, flag=True):
         # bundle lefts, rights, parents => tmp_batch_size * hidden_size
-        # print(len(a_lefts), len(a_rights))
-        a_lefts = batch_bundle(a_lefts)
-        a_rights = batch_bundle(a_rights)
-        a_parents = batch_bundle(a_parents)
+        # print(len(a_lefts), len(a_rights)
+
+        attn_lefts = batch_bundle(attn_lefts)
+        attn_rights = batch_bundle(attn_rights)
         b_lefts = batch_bundle(b_lefts)
         b_rights = batch_bundle(b_rights)
-        targets = batch_bundle(targets)
+        a_parents = batch_bundle(a_parents)
 
-        attn_weights = torch.bmm(torch.stack([a_lefts, a_rights], 1), targets.unsqueeze(2))
-        attn_weights = self.sm(attn_weights.squeeze(2)).unsqueeze(1)
+        attn_weights = torch.cat([attn_lefts, attn_rights], 1)
+        attn_weights = self.sm(attn_weights)#.unsqueeze(1)
 
-        b_parents = torch.bmm(attn_weights, torch.stack([b_lefts, b_rights], 1)).squeeze(1) + a_parents
-        # print(a_parents.size(), b_parents.size())
-        # print(b_parents.size())
+        #return batch_unb undle(a_parents)
+        # las = bvv(a_lefts, targets)
+        # ras = bvv(a_rights, targets)
+        # #print(las.size(), ras.size())
+        # attn_weights = self.sm(torch.cat([las, ras], 1))
+        # print(attn_weights.size())
+        b_parents = b_lefts * attn_weights[:, 0].unsqueeze(1).expand_as(b_lefts) + \
+                    b_rights * attn_weights[:, 1].unsqueeze(1).expand_as(b_rights) + \
+                    a_parents
+
+        #return batch_unbundle(b_parents), (attn_weights, attn_lefts, attn_rights, b_lefts, b_rights)
+        #return batch_unbundle(a_parents)
+        #torch.addcmul(a_parents, 1.0, b_lefts,  attn_weights[:, 0].unsqueeze(1).expand_as(b_lefts))
+        #torch.addcmul(a_parents, 1.0, b_rights, attn_weights[:, 1].unsqueeze(1).expand_as(b_rights))
+
+        #b_parents = torch.bmm(attn_weights, torch.stack([b_lefts, b_rights], 1)).squeeze(1) + a_parents
         b_parents = batch_unbundle(b_parents)
-        return b_parents
+        return b_parents, (attn_weights, attn_lefts, attn_rights, b_lefts, b_rights)
 
 
 class TreeGuidedAttention(nn.Module):
@@ -55,6 +68,21 @@ class TreeGuidedAttention(nn.Module):
         self.tanh = nn.Tanh()
         self.attn_out = nn.Linear(hidden_dim * 2, hidden_dim, bias=False)
 
+    def attn_forward(self, hidden, stack_context, num_transitions):
+        context = Variable(stack_context[0][0].data.
+                           new(len(stack_context), num_transitions, hidden.size(1))
+                           .zero_())
+        #print(context.size())
+        # for i in range(len(stack_context)):
+        #     offset = num_transitions - len(stack_context[0])
+        #     for j in range(len(stack_context[i])):
+        #         context[i, j + offset] = stack_context[0][j].unsqueeze(0)
+
+        attn = torch.bmm(context, hidden.unsqueeze(2))
+        #print(attn.size())
+        attn = [list(torch.split(a.squeeze(0), 1, 0)) for a in torch.split(attn, 1, 0)]
+        return attn
+
     def forward(self, hidden, stack_context, transitions):
         """
         :param hidden: hidden state of decoder:batch_size * hidden_size
@@ -63,6 +91,8 @@ class TreeGuidedAttention(nn.Module):
         :return: attention output of hidden state
         """
         # copy the stack context as the buffers
+        attn_buffers = self.attn_forward(hidden, stack_context, transitions.size(0))
+
         buffers = []
         for i in range(len(stack_context)):
             buffer = [h for h in stack_context[i]]
@@ -70,34 +100,38 @@ class TreeGuidedAttention(nn.Module):
 
         num_transitions = transitions.size(0)
         # print(print('attention layer {}, {}'.format(len(buffers), num_transitions)))
-        a_stacks = [[] for _ in range(transitions.size(1))]
+        attn_stacks = [[] for _ in range(transitions.size(1))]
         b_stacks = [[] for _ in range(transitions.size(1))]
 
         for i in range(num_transitions):
             trans = transitions[i]
-            a_lefts, a_rights, b_lefts, b_rights, parents, targets = [], [], [], [], [], []
-            for transition, buf, a_stack, b_stack in zip(trans.data, buffers, a_stacks, b_stacks):
+            attn_lefts, attn_rights, b_lefts, b_rights, parents = [], [], [], [], []
+
+            for transition, buf, attn_buf, attn_stack, b_stack in \
+                    zip(trans.data, buffers, attn_buffers, attn_stacks, b_stacks):
+
                 if transition == ConstantTransition.REDUCE:  # reduce
                     # note the reduce need push the current state
-                    a_rights.append(a_stack.pop())
-                    a_lefts.append(a_stack.pop())
+                    attn_rights.append(attn_stack.pop())
+                    attn_lefts.append(attn_stack.pop())
 
                     b_rights.append(b_stack.pop())
                     b_lefts.append(b_stack.pop())
 
-                    targets.append(hidden[0].unsqueeze(0))
-
-                    a_stack.append(buf.pop())
                     # do not pop for parent state
-                    parents.append(a_stack[-1])
+                    parents.append(buf[-1])
+
+                    #push parent attention weight into stack
+                    attn_stack.append(attn_buf.pop())
 
                 elif transition == ConstantTransition.SHIFT:  # shift
                     # append the same leaf state
-                    b_stack.append(buf[-1])
-                    a_stack.append(buf.pop())
-            if a_rights:
+                    b_stack.append(buf.pop())
+                    attn_stack.append(attn_buf.pop())
+
+            if attn_rights:
                 # print(k1, k, k2, s, s2, torch.sum(trans.data))
-                reduced = iter(self.attn_reducer(a_lefts, a_rights, parents, b_lefts, b_rights, targets))
+                reduced = iter(self.attn_reducer(attn_lefts, attn_rights,  b_lefts, b_rights, parents)[0])
                 for transition, b_stack in zip(trans.data, b_stacks):
                     if transition == 2:
                         b_stack.append(next(reduced))

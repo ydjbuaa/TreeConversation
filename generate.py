@@ -5,10 +5,10 @@ import math
 
 import torch
 
-from seq2seq.generator import ConversationGenerator
+from seq2seq.generator_ydj import ConversationGenerator
 
 parser = argparse.ArgumentParser(description='generate.py')
-parser.add_argument('-model', default="./data/stc.small/checkpoints/model_acc_19.73_ppl_272.28_e10.pt",
+parser.add_argument('-model', default="./data/stc.middle/checkpoints/model_acc_11.38_ppl_231.33_e1.pt",
                     help='Path to model .pt file')
 parser.add_argument('-src', default="./data/stc.small/test/src.test.txt",
                     help='Source sequence to decode (one line per sequence)')
